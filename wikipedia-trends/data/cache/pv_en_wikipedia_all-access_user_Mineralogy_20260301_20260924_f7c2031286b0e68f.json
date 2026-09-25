@@ -1,0 +1,37 @@
+{
+  "project": "en.wikipedia",
+  "article": "Mineralogy",
+  "start": "20260301",
+  "end": "20260924",
+  "exists": true,
+  "series": [
+    {
+      "month": "202603",
+      "views": 2690
+    },
+    {
+      "month": "202604",
+      "views": 2469
+    },
+    {
+      "month": "202605",
+      "views": 2502
+    },
+    {
+      "month": "202606",
+      "views": 2368
+    },
+    {
+      "month": "202607",
+      "views": 2353
+    },
+    {
+      "month": "202608",
+      "views": 2675
+    },
+    {
+      "month": "202609",
+      "views": 1943
+    }
+  ]
+}
