@@ -33,6 +33,7 @@ from pageviews_api import (
 )
 from trend_analysis import analyze_series, rank_series
 from report_builder import build_pdf_report
+from report_delivery import print_deliverables
 
 
 def _parse_articles_override(raw: str) -> dict[str, str]:
@@ -222,10 +223,13 @@ def cmd_run(args: argparse.Namespace) -> None:
     print("Ranked recommendation (what to explore next):")
     for r in ranked:
         print(f"  [{r['priority']}] {r['rationale']}")
-    print("-" * 70)
-    print(f"Chart: {out_png}")
-    print(f"One-page PDF report: {out_pdf}")
-    print("=" * 70)
+    print_deliverables(
+        out_png,
+        out_pdf,
+        copy_downloads=not args.no_downloads,
+        open_files=args.open,
+        title=topic_title,
+    )
 
 
 def _slug(text: str) -> str:
@@ -330,6 +334,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--out", default=None, help="output base path without extension")
     p_run.add_argument("--raw", action="store_true", help="plot raw view counts instead of normalized index")
     p_run.add_argument("--refresh", action="store_true", help="bypass local cache")
+    p_run.add_argument(
+        "--no-downloads",
+        action="store_true",
+        help="do not copy PNG/PDF to ~/Downloads (also WIKI_SKILL_SKIP_DOWNLOADS=1)",
+    )
+    p_run.add_argument(
+        "--open",
+        action="store_true",
+        help="open chart and PDF in the default app (Preview/Finder on macOS)",
+    )
     p_run.set_defaults(func=cmd_run)
 
     return p

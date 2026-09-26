@@ -70,9 +70,12 @@ All commands below assume `PY=<this-skill-directory>/.venv/bin/python`.
    - if any language has `NO DATA`: that means no article exists in that
      edition (per Wikidata), **not** confirmed zero interest — say so.
 
-5. **Show the chart inline** using the PNG path printed at the end
-   (`![chart](reports/if_pl_cs.png)`), and mention the PDF path so the user
-   can share it.
+5. **Show the chart inline** — after `run`, stdout ends with a **DELIVERABLES**
+   block. Copy the line under `Paste in chat (markdown image):` into your reply
+   (absolute path to PNG). The same paths are in one-line JSON:
+   `WIKI_TRENDS_DELIVERABLES={...}`. By default PNG+PDF are also copied to
+   **~/Downloads** (`wikipedia-trends_<slug>.png/.pdf`). Use `--open` to launch
+   Preview/Finder; `--no-downloads` to skip the copy.
 
 6. **Follow-up / related requests reuse cached data automatically** — raw
    API responses are cached under `data/cache/` for 7 days (pageviews) and
