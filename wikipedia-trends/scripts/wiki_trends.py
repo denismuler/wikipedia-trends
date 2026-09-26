@@ -3,7 +3,8 @@
 
 Subcommands (also usable standalone, see each script's --help):
   resolve  - topic phrase -> Wikidata item -> per-language article titles
-  fetch    - one (lang, article) -> monthly pageviews JSON (cached)
+  fetch    - one (lang, article) -> pageviews JSON (cached; monthly by default)
+  query    - other Page view analytics endpoints (aggregate, top, top-by-country, legacy, …)
   analyze  - one pageviews JSON -> trend stats + confidence + caveats
   report   - N analyzed series -> comparison chart PNG + one-page PDF
   run      - full pipeline: resolve/fetch/analyze/report + human summary
@@ -21,6 +22,15 @@ from pathlib import Path
 from common import DATA_DIR, REPORTS_DIR, yyyymmdd, months_ago, ensure_dirs
 from wikidata_resolve import resolve_topic, normalize_title
 from pageviews_fetch import fetch_pageviews
+from pageviews_api import (
+    UNSUPPORTED_CATALOG,
+    fetch_aggregate,
+    fetch_legacy_pagecounts,
+    fetch_per_article,
+    fetch_top_articles,
+    fetch_top_by_country,
+    unsupported_catalog_response,
+)
 from trend_analysis import analyze_series, rank_series
 from report_builder import build_pdf_report
 
@@ -46,8 +56,81 @@ def cmd_resolve(args: argparse.Namespace) -> None:
 def cmd_fetch(args: argparse.Namespace) -> None:
     end = args.end or yyyymmdd(date.today())
     start = args.start or yyyymmdd(months_ago(args.months))
-    result = fetch_pageviews(args.lang, args.article, start, end, refresh=args.refresh)
+    if args.granularity == "monthly":
+        result = fetch_pageviews(
+            args.lang, args.article, start, end,
+            access=args.access, agent=args.agent, refresh=args.refresh,
+        )
+    else:
+        result = fetch_per_article(
+            args.lang, args.article, start, end,
+            granularity=args.granularity, access=args.access, agent=args.agent,
+            refresh=args.refresh,
+        )
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def cmd_query(args: argparse.Namespace) -> None:
+    mode = args.mode
+    if mode in UNSUPPORTED_CATALOG:
+        print(json.dumps(unsupported_catalog_response(mode), ensure_ascii=False, indent=2))
+        sys.exit(2)
+
+    refresh = args.refresh
+    if mode == "per-article":
+        end = args.end or yyyymmdd(date.today())
+        start = args.start or yyyymmdd(months_ago(args.months))
+        if not args.lang or not args.article:
+            print("ERROR: --lang and --article required for per-article", file=sys.stderr)
+            sys.exit(1)
+        result = fetch_per_article(
+            args.lang, args.article, start, end,
+            granularity=args.granularity, access=args.access, agent=args.agent,
+            refresh=refresh,
+        )
+    elif mode == "aggregate":
+        end = args.end or yyyymmdd(date.today())
+        start = args.start or yyyymmdd(months_ago(args.months))
+        project = args.project or (f"{args.lang}.wikipedia.org" if args.lang else None)
+        if not project:
+            print("ERROR: --project or --lang required for aggregate", file=sys.stderr)
+            sys.exit(1)
+        result = fetch_aggregate(
+            project, start, end,
+            granularity=args.granularity, access=args.access, agent=args.agent,
+            refresh=refresh,
+        )
+    elif mode == "top":
+        if not args.year or not args.month:
+            print("ERROR: --year and --month required for top", file=sys.stderr)
+            sys.exit(1)
+        project = args.project or (f"{args.lang}.wikipedia.org" if args.lang else "en.wikipedia.org")
+        result = fetch_top_articles(
+            project, args.year, args.month, day=args.day,
+            access=args.access, limit=args.limit, refresh=refresh,
+        )
+    elif mode == "top-by-country":
+        if not args.year or not args.month:
+            print("ERROR: --year and --month required for top-by-country", file=sys.stderr)
+            sys.exit(1)
+        project = args.project or (f"{args.lang}.wikipedia.org" if args.lang else "en.wikipedia.org")
+        result = fetch_top_by_country(project, args.year, args.month, access=args.access, refresh=refresh)
+    elif mode == "legacy-pagecounts":
+        end = args.end or "2015070100"
+        start = args.start or "2015010100"
+        project = args.project or (f"{args.lang}.wikipedia.org" if args.lang else "en.wikipedia.org")
+        result = fetch_legacy_pagecounts(
+            project, start, end,
+            granularity=args.granularity, access_site=args.access_site, refresh=refresh,
+        )
+    else:
+        print(f"ERROR: unknown mode {mode}", file=sys.stderr)
+        sys.exit(1)
+
+    if not args.include_raw:
+        result = {k: v for k, v in result.items() if k != "raw"}
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    _print_query_summary(result)
 
 
 def cmd_analyze(args: argparse.Namespace) -> None:
@@ -149,6 +232,32 @@ def _slug(text: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in text.lower()).strip("_")[:50]
 
 
+def _print_query_summary(result: dict) -> None:
+    ep = result.get("endpoint")
+    if result.get("error") == "unsupported":
+        print(result.get("message", ""), file=sys.stderr)
+        return
+    if ep == "top" and result.get("articles"):
+        print("-" * 50, file=sys.stderr)
+        for row in result["articles"][:10]:
+            print(f"  #{row.get('rank')} {row.get('article')}: {row.get('views'):,} views", file=sys.stderr)
+    elif ep == "top-by-country" and result.get("countries"):
+        print("-" * 50, file=sys.stderr)
+        print(result.get("privacy_note", ""), file=sys.stderr)
+        for row in result["countries"][:10]:
+            print(
+                f"  #{row.get('rank')} {row.get('country')}: "
+                f"{row.get('views')} (ceil≈{row.get('views_ceil')})",
+                file=sys.stderr,
+            )
+    elif ep in ("aggregate", "legacy-pagecounts") and result.get("series"):
+        pts = result["series"]
+        key = "views" if ep == "aggregate" else "count"
+        total = sum(p[key] for p in pts)
+        print("-" * 50, file=sys.stderr)
+        print(f"  {len(pts)} points, total {key}={total:,}", file=sys.stderr)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="wiki_trends.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -167,8 +276,42 @@ def build_parser() -> argparse.ArgumentParser:
     p_fetch.add_argument("--months", type=int, default=24)
     p_fetch.add_argument("--start", default=None)
     p_fetch.add_argument("--end", default=None)
+    p_fetch.add_argument("--granularity", default="monthly", choices=["monthly", "daily"])
+    p_fetch.add_argument("--access", default="all-access")
+    p_fetch.add_argument("--agent", default="user")
     p_fetch.add_argument("--refresh", action="store_true")
     p_fetch.set_defaults(func=cmd_fetch)
+
+    query_modes = [
+        "per-article", "aggregate", "top", "top-by-country", "legacy-pagecounts",
+        "per-article-by-country", "top-articles-by-country", "per-editor", "top-per-editor",
+    ]
+    p_query = sub.add_parser(
+        "query",
+        help="Page view analytics API (see reference.md); use mode names from Wikimedia docs",
+    )
+    p_query.add_argument(
+        "mode",
+        choices=query_modes,
+        help="endpoint family (unsupported modes print reason and exit 2)",
+    )
+    p_query.add_argument("--project", default=None, help="e.g. en.wikipedia.org or all-projects")
+    p_query.add_argument("--lang", default=None, help="shorthand: builds {lang}.wikipedia.org")
+    p_query.add_argument("--article", default=None)
+    p_query.add_argument("--year", default=None)
+    p_query.add_argument("--month", default=None)
+    p_query.add_argument("--day", default="all-days", help="for top: DD or all-days")
+    p_query.add_argument("--limit", type=int, default=None, help="trim top articles list")
+    p_query.add_argument("--months", type=int, default=24)
+    p_query.add_argument("--start", default=None)
+    p_query.add_argument("--end", default=None)
+    p_query.add_argument("--granularity", default="monthly", choices=["monthly", "daily", "hourly"])
+    p_query.add_argument("--access", default="all-access")
+    p_query.add_argument("--agent", default="user")
+    p_query.add_argument("--access-site", default="all-sites", help="legacy-pagecounts only")
+    p_query.add_argument("--refresh", action="store_true")
+    p_query.add_argument("--include-raw", action="store_true", help="include full API payload in JSON")
+    p_query.set_defaults(func=cmd_query)
 
     p_analyze = sub.add_parser("analyze", help="trend stats for one fetched series")
     p_analyze.add_argument("--data-file", required=True)

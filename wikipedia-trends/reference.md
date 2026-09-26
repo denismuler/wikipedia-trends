@@ -5,12 +5,23 @@ you generally shouldn't need to read this to answer a normal request.
 
 ## Data source
 
-- **Pageviews**: [Wikimedia REST API, per-article endpoint](https://wikimedia.org/api/rest_v1/#/Pageviews%20data).
-  `GET /metrics/pageviews/per-article/{project}/{access}/{agent}/{article}/monthly/{start}/{end}`.
-  We always use `access=all-access` (desktop + mobile web + mobile app combined)
-  and `agent=user` (excludes bots/spiders/crawlers) — the closest available
-  proxy for genuine human interest. Data exists from **2015-07** onward; any
-  `--start` earlier than that is clamped automatically.
+Official catalog: [Page view analytics](https://doc.wikimedia.org/generated-data-platform/aqs/analytics-api/reference/page-views.html)
+(Wikimedia Analytics API, REST v1 at `https://wikimedia.org/api/rest_v1/metrics/pageviews/…`).
+
+| Catalog item | CLI | Status |
+|---|---|---|
+| Pageviews for a page | `fetch` / `query per-article` | **Yes** — monthly (default) or daily; `run` uses monthly + `agent=user` |
+| Project total pageviews | `query aggregate` | **Yes** — monthly/daily/hourly |
+| Top articles | `query top` | **Yes** — month (`day=all-days`) or single day |
+| Pageviews by country (project) | `query top-by-country` | **Yes** — bucketed ranges (`views_ceil` for rank) |
+| Legacy pagecounts (pre-2015-07) | `query legacy-pagecounts` | **Yes** — `/metrics/legacy/pagecounts/aggregate/…` |
+| Per-article by country | `query per-article-by-country` | **No** — not published (reader privacy) |
+| Top articles for one country | `query top-articles-by-country` | **No** — no REST v1 route found |
+| Editor edited-pages pageviews | `query per-editor` / `top-per-editor` | **No** — documented in changelog, not on REST v1 here |
+
+- **Default trend pipeline** (`run`): per-article monthly,
+  `access=all-access`, `agent=user`. Data from **2015-07** onward; `--start`
+  before that is clamped for monthly article series.
 - **Topic → article mapping**: [Wikidata](https://www.wikidata.org/w/api.php).
   `wbsearchentities` finds the best-matching item for a free-text topic in the
   pivot language; `wbgetentities` (props=sitelinks) reads the corresponding
@@ -64,11 +75,9 @@ you generally shouldn't need to read this to answer a normal request.
 
 - **Pageviews ≠ purchase intent.** This is a leading signal for "worth a
   deeper look", not a demand forecast. Always say so.
-- **No demographic split.** The API gives country-level pageviews on other
-  endpoints, but per-article-per-country data is not used here (see
-  Roadmap in the top-level README) — so "interest in language X" is a
-  proxy for "the audience that reads X-language Wikipedia", which is
-  correlated with but not identical to a country/market audience.
+- **No per-article geography.** Use `query top-by-country` for
+  *project-level* country mix, not for a single article. "Interest in
+  language X" still means readers of X-language Wikipedia, not a country.
 - **Article existence ≠ absence of interest.** No sitelink can mean the
   topic genuinely isn't of local interest, or simply that nobody has
   written the article yet. The skill always flags this rather than

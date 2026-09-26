@@ -96,9 +96,24 @@ All commands below assume `PY=<this-skill-directory>/.venv/bin/python`.
 ## Subcommands (for narrower/manual control)
 
 - `resolve --topic "..." --langs a,b,c [--pivot-lang en]` — inspect topic→Wikidata→titles mapping only.
-- `fetch --lang xx --article "Exact Title" --months 24` — fetch one series only.
+- `fetch --lang xx --article "Exact Title" --months 24` — fetch one series only
+  (`--granularity daily` optional).
+- `query <mode> …` — other [Page view analytics](https://doc.wikimedia.org/generated-data-platform/aqs/analytics-api/reference/page-views.html)
+  endpoints: `aggregate`, `top`, `top-by-country`, `legacy-pagecounts`, plus
+  `per-article` (same as fetch with more flags). Modes listed in the docs but
+  **not** on the API (`per-article-by-country`, `top-articles-by-country`,
+  `per-editor`, `top-per-editor`) exit with an explanation — do not invent data.
 - `analyze --data-file path.json` — stats for one already-fetched series.
 - `run ...` — full pipeline (the one you'll use almost always).
+
+  Examples:
+
+  ```bash
+  $PY scripts/wiki_trends.py query aggregate --lang en --months 12
+  $PY scripts/wiki_trends.py query top --lang en --year 2024 --month 01 --limit 20
+  $PY scripts/wiki_trends.py query top-by-country --lang pl --year 2024 --month 06
+  $PY scripts/wiki_trends.py query legacy-pagecounts --lang en --start 2015010100 --end 2015070100
+  ```
 
 Run `$PY scripts/wiki_trends.py <subcommand> --help` for full flag lists.
 

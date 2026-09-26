@@ -145,3 +145,83 @@ def months_ago(n: int, from_date: date | None = None) -> date:
 
 def yyyymmdd(d: date) -> str:
     return d.strftime("%Y%m%d")
+
+
+def project_domain(lang_or_project: str) -> str:
+    """Normalize a Wikipedia lang code or project string to ``{lang}.wikipedia.org``."""
+    raw = lang_or_project.strip()
+    if not raw:
+        raise ValueError("empty project")
+    if raw in ("all-projects", "all-wikipedia-projects"):
+        return raw
+    if raw.endswith(".wikipedia.org"):
+        return raw
+    if raw.endswith(".wikipedia"):
+        return f"{raw}.org"
+    if "." in raw:
+        return raw if raw.endswith(".org") else raw
+    return f"{raw}.wikipedia.org"
+
+
+def wikipedia_lang_from_project(project: str) -> str:
+    """``en.wikipedia.org`` or ``en.wikipedia`` -> ``en``."""
+    base = project.replace(".wikipedia.org", "").replace(".wikipedia", "")
+    return base.split(".")[0] if base else project
+
+
+def day_range(start: str, end: str) -> list[str]:
+    """Return YYYYMMDD strings from start to end inclusive (YYYYMMDD or YYYYMMDDHH)."""
+    from datetime import timedelta
+
+    s = _parse_yyyymmdd(start)
+    e = _parse_yyyymmdd(end)
+    out: list[str] = []
+    cur = s
+    while cur <= e:
+        out.append(cur.strftime("%Y%m%d"))
+        cur += timedelta(days=1)
+    return out
+
+
+def _parse_yyyymmdd(s: str) -> date:
+    s = s.strip()
+    if len(s) >= 8:
+        return datetime.strptime(s[:8], "%Y%m%d").date()
+    raise ValueError(f"Expected YYYYMMDD… date, got {s!r}")
+
+
+def range_endpoints(start: str, end: str, granularity: str) -> tuple[str, str]:
+    """Format start/end path segments for Wikimedia pageviews APIs."""
+    g = granularity.lower()
+    if g == "monthly":
+        return _to_first_of_month(start).strftime("%Y%m%d"), _to_first_of_month(end).strftime("%Y%m%d")
+    if g == "daily":
+        return _parse_yyyymmdd(start).strftime("%Y%m%d"), _parse_yyyymmdd(end).strftime("%Y%m%d")
+    if g == "hourly":
+        return _pad_hour(start), _pad_hour(end)
+    raise ValueError(f"unsupported granularity: {granularity}")
+
+
+def aggregate_range_endpoints(start: str, end: str, granularity: str) -> tuple[str, str]:
+    """Format start/end for ``/pageviews/aggregate/…`` (monthly/daily/hourly use YYYYMMDDHH)."""
+    g = granularity.lower()
+    if g == "monthly":
+        s = _to_first_of_month(start).strftime("%Y%m%d") + "00"
+        e = _to_first_of_month(end).strftime("%Y%m%d") + "00"
+        return s, e
+    if g == "daily":
+        return _parse_yyyymmdd(start).strftime("%Y%m%d"), _parse_yyyymmdd(end).strftime("%Y%m%d")
+    if g == "hourly":
+        return _pad_hour(start), _pad_hour(end)
+    raise ValueError(f"unsupported granularity: {granularity}")
+
+
+def _pad_hour(s: str) -> str:
+    s = s.strip()
+    if len(s) == 10 and s.endswith("00"):
+        return s
+    if len(s) == 8:
+        return s + "00"
+    if len(s) >= 10:
+        return s[:10]
+    raise ValueError(f"Expected YYYYMMDD or YYYYMMDDHH, got {s!r}")
